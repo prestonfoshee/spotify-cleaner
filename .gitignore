@@ -1,0 +1,19 @@
+# Node.js
+node_modules/
+
+# Output of the TypeScript compiler
+dist/
+
+# Environment variables file
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.code-workspace
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
