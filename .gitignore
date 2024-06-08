@@ -17,3 +17,6 @@ dist/
 
 # Windows
 Thumbs.db
+
+# tmp
+tmp/

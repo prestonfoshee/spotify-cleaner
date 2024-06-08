@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "search": "npx ts-node src/cli.ts search",
+    "likes": "npx tsx src/cli.ts likes"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +16,11 @@
     "axios": "^1.7.2",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
+    "open": "^10.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
+  },
+  "devDependencies": {
+    "@types/open": "^6.2.1"
   }
 }
