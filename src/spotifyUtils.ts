@@ -43,50 +43,158 @@ export const searchArtist = async (artistName: string, token: string) => {
   return response.data.artists.items[0]
 }
 
+// new function with batching
 export const getLikedSongs = async () => {
   const token = await authenticateUser()
-
-  const allLikedSongs: any[] = []
-  let offset = 0
   const limit = 50
+  const allLikedSongs: string[] = []
 
-  while (true) {
-    try {
-      const response = await axios.get('https://api.spotify.com/v1/me/tracks', {
+  try {
+    // Fetch the total number of liked songs
+    const { data: initialResponse } = await axios.get(
+      'https://api.spotify.com/v1/me/tracks',
+      {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        params: {
-          limit: limit,
-          offset: offset,
-        },
-      })
-      const items = response.data.items
-      // creater array with all liked songs songs names
-      items.forEach((item: any) => {
-        allLikedSongs.push(item.track.name)
-      })
-      // allLikedSongs.push(...items.track.name)
-
-      // may need to change this to 0
-      if (items.length < 50) {
-        break
+        params: { limit: 1, offset: 0 },
       }
-      offset += limit
-    } catch (error: any) {
-      console.error(
-        'Error fetching liked songs:',
-        error.response?.data || error.message
-      )
-      return []
+    )
+
+    const total = initialResponse.total
+    console.log(`Total liked songs: ${total}`)
+
+    // Calculate the number of pages needed
+    const numPages = Math.ceil(total / limit)
+    console.log(`Fetching data in ${numPages} pages...`)
+
+    // Generate offsets for all pages
+    const offsets = Array.from({ length: numPages }, (_, i) => i * limit)
+
+    // Helper function to fetch a single page
+    const fetchPage = async (offset: number) => {
+      try {
+        const { data } = await axios.get(
+          'https://api.spotify.com/v1/me/tracks',
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            params: { limit, offset },
+          }
+        )
+        console.log(`Fetched ${data.items.length} songs for offset ${offset}`)
+        return data.items.map((item: any) => item.track.name)
+      } catch (error: any) {
+        const status = error.response?.status
+        if (status === 429) {
+          const retryAfter = parseInt(
+            error.response.headers['retry-after'] || '1',
+            10
+          )
+          console.warn(`Rate limited. Retrying after ${retryAfter} seconds.`)
+          await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
+          return fetchPage(offset) // Retry the same offset
+        }
+        console.error(
+          `Error fetching songs for offset ${offset}:`,
+          error.message
+        )
+        return []
+      }
     }
-    // create json file with all liked songs in tmp folder
+
+    // Batch fetch requests to avoid exceeding rate limits
+    const concurrency = 5 // Limit to 5 concurrent requests
+    for (let i = 0; i < offsets.length; i += concurrency) {
+      const batch = offsets.slice(i, i + concurrency)
+      const results = await Promise.all(batch.map(fetchPage))
+      results.forEach((songs) => allLikedSongs.push(...songs))
+    }
+
+    console.log(`Total songs fetched: ${allLikedSongs.length}`)
+
+    // Write all liked songs to a JSON file
     fs.writeFileSync(
       'tmp/likedSongs.json',
       JSON.stringify(allLikedSongs, null, 2)
     )
+  } catch (error: any) {
+    console.error(
+      'Error fetching liked songs:',
+      error.response?.data || error.message
+    )
+    return []
   }
+
+  return allLikedSongs
 }
+
+// old function without batching
+
+// export const getLikedSongs = async () => {
+//   const token = await authenticateUser();
+
+//   const allLikedSongs: string[] = [];
+//   let offset = 0;
+//   const limit = 50;
+
+//   let total = 0;
+
+//   while (true) {
+//     console.log(`Starting iteration with offset: ${offset}`);
+
+//     try {
+//       const response = await axios.get("https://api.spotify.com/v1/me/tracks", {
+//         headers: {
+//           Authorization: `Bearer ${token}`,
+//         },
+//         params: {
+//           limit: limit,
+//           offset: offset,
+//         },
+//       });
+
+//       const { items } = response.data;
+//       if (offset === 0) {
+//         total = response.data.total;
+//         console.log(`Total liked songs: ${total}`);
+//       }
+
+//       if (!items || items.length === 0) {
+//         console.log("No items returned. Breaking loop.");
+//         break;
+//       }
+
+//       console.log(`Fetched ${items.length} songs, offset: ${offset}`);
+//       items.forEach((item: any) => {
+//         allLikedSongs.push(item.track.name);
+//       });
+
+//       offset += items.length;
+
+//       console.log(
+//         `Updated offset: ${offset}, Total fetched: ${allLikedSongs.length}`
+//       );
+//       if (allLikedSongs.length >= total) {
+//         console.log("Fetched all songs. Exiting loop.");
+//         break;
+//       }
+//     } catch (error: any) {
+//       console.error(
+//         "Error occurred during API call:",
+//         error.response?.data || error.message
+//       );
+//       return []; // Exit on error
+//     }
+//   }
+
+//   fs.writeFileSync(
+//     "tmp/likedSongs.json",
+//     JSON.stringify(allLikedSongs, null, 2)
+//   );
+//   return allLikedSongs;
+// };
 
 const authenticateUser = (): Promise<string> => {
   return new Promise(async (resolve, reject) => {
