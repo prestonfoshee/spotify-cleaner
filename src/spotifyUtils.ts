@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosResponse } from 'axios'
 import { config } from 'dotenv'
 import querystring from 'querystring'
 import http from 'http'
@@ -7,27 +7,39 @@ import fs from 'fs'
 
 config()
 
-const clientId = process.env.SPOTIFY_CLIENT_ID
-const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
-const redirectUri: string = process.env.SPOTIFY_REDIRECT_URI as string
-const scopes = 'user-library-read'
+const clientId: string | undefined = process.env.SPOTIFY_CLIENT_ID
+const clientSecret: string | undefined = process.env.SPOTIFY_CLIENT_SECRET
+const redirectUri: string | undefined = process.env.SPOTIFY_REDIRECT_URI
+const scopes: string = 'user-library-read'
 const open = import('open')
 
-export const getSpotifyToken = async () => {
-  const response = await axios.post(
-    'https://accounts.spotify.com/api/token',
-    'grant_type=client_credentials',
-    {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(
-          `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
-        ).toString('base64')}`,
-      },
-    }
-  )
+export const getSpotifyToken = async (): Promise<string> => {
+  if (!clientId || !clientSecret) {
+    throw new Error('Missing Spotify client ID or client secret')
+  }
 
-  return response.data.access_token
+  try {
+    const response: AxiosResponse = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      'grant_type=client_credentials',
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(
+            `${clientId}:${clientSecret}`
+          ).toString('base64')}`,
+        },
+      }
+    )
+
+    return response.data.access_token
+  } catch (error: any) {
+    console.error(
+      'Error fetching Spotify token:',
+      error.response?.data || error.message
+    )
+    throw error
+  }
 }
 
 export const searchArtist = async (artistName: string, token: string) => {
@@ -45,13 +57,13 @@ export const searchArtist = async (artistName: string, token: string) => {
 
 // new function with batching
 export const getLikedSongs = async () => {
-  const token = await authenticateUser()
-  const limit = 50
+  const token: string = await authenticateUser()
+  const limit: number = 50
   const allLikedSongs: string[] = []
 
   try {
     // Fetch the total number of liked songs
-    const { data: initialResponse } = await axios.get(
+    const { data: initialResponse }: AxiosResponse = await axios.get(
       'https://api.spotify.com/v1/me/tracks',
       {
         headers: {
@@ -61,18 +73,21 @@ export const getLikedSongs = async () => {
       }
     )
 
-    const total = initialResponse.total
+    const total: number = initialResponse.total
     console.log(`Total liked songs: ${total}`)
 
     // Calculate the number of pages needed
-    const numPages = Math.ceil(total / limit)
+    const numPages: number = Math.ceil(total / limit)
     console.log(`Fetching data in ${numPages} pages...`)
 
     // Generate offsets for all pages
-    const offsets = Array.from({ length: numPages }, (_, i) => i * limit)
+    const offsets: number[] = Array.from(
+      { length: numPages },
+      (_, i) => i * limit
+    )
 
     // Helper function to fetch a single page
-    const fetchPage = async (offset: number) => {
+    const fetchPage = async (offset: number): Promise<string[]> => {
       try {
         const { data } = await axios.get(
           'https://api.spotify.com/v1/me/tracks',
@@ -105,10 +120,10 @@ export const getLikedSongs = async () => {
     }
 
     // Batch fetch requests to avoid exceeding rate limits
-    const concurrency = 5 // Limit to 5 concurrent requests
+    const concurrency: number = 5 // Limit to 5 concurrent requests
     for (let i = 0; i < offsets.length; i += concurrency) {
-      const batch = offsets.slice(i, i + concurrency)
-      const results = await Promise.all(batch.map(fetchPage))
+      const batch: number[] = offsets.slice(i, i + concurrency)
+      const results: string[][] = await Promise.all(batch.map(fetchPage))
       results.forEach((songs) => allLikedSongs.push(...songs))
     }
 
@@ -198,6 +213,13 @@ export const getLikedSongs = async () => {
 
 const authenticateUser = (): Promise<string> => {
   return new Promise(async (resolve, reject) => {
+    if (!clientId || !clientSecret || !redirectUri) {
+      console.error('Missing Spotify client ID, client secret, or redirect URI')
+      reject(
+        new Error('Missing Spotify client ID, client secret, or redirect URI')
+      )
+      return
+    }
     const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(
       scopes
     )}&redirect_uri=${encodeURIComponent(redirectUri)}`
