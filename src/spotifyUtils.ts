@@ -1,3 +1,5 @@
+import { Server } from './types'
+
 import axios, { AxiosResponse } from 'axios'
 import { config } from 'dotenv'
 import querystring from 'querystring'
@@ -220,23 +222,26 @@ const authenticateUser = (): Promise<string> => {
       )
       return
     }
-    const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(
+    const authUrl: string = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(
       scopes
     )}&redirect_uri=${encodeURIComponent(redirectUri)}`
 
     console.log('Opening browser for Spotify authentication...')
     ;(await open).default(authUrl)
 
-    const server = http.createServer(async (req, res) => {
+    const server: Server = http.createServer(async (req, res) => {
       if (req.url) {
-        const queryObject = url.parse(req.url, true).query
-        const authCode = queryObject.code
+        const queryObject: querystring.ParsedUrlQuery = url.parse(
+          req.url,
+          true
+        ).query
+        const authCode: string | string[] | undefined = queryObject.code
 
         if (authCode) {
-          const tokenUrl = 'https://accounts.spotify.com/api/token'
+          const tokenUrl: string = 'https://accounts.spotify.com/api/token'
 
           try {
-            const response = await axios.post(
+            const response: AxiosResponse = await axios.post(
               tokenUrl,
               querystring.stringify({
                 grant_type: 'authorization_code',
@@ -252,7 +257,7 @@ const authenticateUser = (): Promise<string> => {
               }
             )
 
-            const accessToken = response.data.access_token
+            const accessToken: string = response.data.access_token
             res.writeHead(200, { 'Content-Type': 'text/plain' })
             res.end('Authentication successful! You can close this window.')
 
